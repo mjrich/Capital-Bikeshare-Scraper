@@ -13,17 +13,24 @@
 import sys, getopt, re, BeautifulSoup, mechanize
 import csv
 
-def parse_table(ride_table):
+def parse_table(ride_table): #needs updating to latest capital bikeshare table website
 	for row in ride_table.findAll("tr")[1:]:
 		output_row = []
 		for col in row.findAll("td"):
 			output_row.append(col.string.strip())
 		yield output_row
 
+def select_form(form):
+	return form.attrs.get('action', None) == 'https://secure.capitalbikeshare.com/profile/login_check'
+
 def main(argv):
 	br = mechanize.Browser()
-	br.open("https://www.capitalbikeshare.com/login") #login page
-	br.select_form(predicate=lambda f: 'id' in f.attrs and f.attrs['id'] == 'login-form') #form name
+	br.set_handle_equiv(False)
+	br.set_handle_robots(False)
+	br.addheaders = [('User-agent','Mozilla/5.0 (X11; Linux x86_64; rv:18.0)Gecko/20100101 Firefox/18.0 (compatible;)'),('Accept', '*/*')]
+	br.open("https://secure.capitalbikeshare.com/profile/login") #login page
+	br.select_form(predicate=select_form)
+
 
 	try:
 		opts, args = getopt.getopt(argv,"hu:p:",["username=","password="])
@@ -39,17 +46,18 @@ def main(argv):
 	     print 'CABIscraper.py -u <username> -p <password>'
 	     sys.exit()
 	  elif opt in ("-u", "--username"):
-	     br["username"] = arg
+	     br["_username"] = arg
 	  elif opt in ("-p", "--password"):
-	     br["password"] = arg
+	     br["_password"] = arg
 
 	# Log-in.
-	print "Logging in with username {0} password {1}".format(br["username"],br["password"])
+	print "Logging in with username {0} password {1}".format(br["_username"],br["_password"])
 	response1 = br.submit().read()
 
 	print "Retrieving account information..."
 	soup = BeautifulSoup.BeautifulSoup(response1)
-	acct_num = soup.find(text="Account Number").findNext("td").string
+	print soup
+	acct_num = soup.find(text="Bike key number").findNext("div").string
 
 	print "Downloading data for account number %s..." % acct_num
 
@@ -57,7 +65,7 @@ def main(argv):
 	header_row = ["Start Station", "Start Date", "End Station", "End Date", "Duration", "Cost", "Distance (miles)", "Calories Burned", "CO2 Offset (lbs.)"]
 	
 	# fetch main Rental History page
-	response1 = br.open("https://www.capitalbikeshare.com/member/rentals/")
+	response1 = br.open("https://secure.capitalbikeshare.com/profile/trips/<LinkCodeHere>") #put your link code here. unltimately will scrape from site
 
 	# start output file
 	filename = "cabi_log_%s.csv" % acct_num
@@ -68,7 +76,7 @@ def main(argv):
 		while True:
 			print "Parsing results for another page of trip history"
 			soup = BeautifulSoup.BeautifulSoup(response1)
-			ride_table = soup.find(id="content").findAll("table")[1]
+			ride_table = soup.find(id="content").findAll("table")[1] #needs updating to latest capital bikeshare website
 
 			for row in parse_table(ride_table):
 				csvwriter.writerow(row)
